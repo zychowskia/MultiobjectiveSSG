@@ -100,7 +100,6 @@ class MO_SSG_Solver:
     def mutate(self, ind):
         if random.random() < 0.2:
             if hasattr(self.game, 'actions') and hasattr(self.game, 'rounds'):
-                # FlipIt-specific mutation (suffix rewrite)
                 idx_in_mix = random.randint(0, len(ind.strategies) - 1)
                 old_strat_idx = ind.strategies[idx_in_mix]
                 old_strat = self.game.pure_strategies[old_strat_idx]
@@ -117,7 +116,6 @@ class MO_SSG_Solver:
                 except ValueError:
                     pass
             else:
-                # Generic mutation: Replace with random strategy
                  idx_in_mix = random.randint(0, len(ind.strategies) - 1)
                  ind.strategies[idx_in_mix] = random.choice(self.pure_strat_indices)
                  self._consolidate_strategy(ind)
