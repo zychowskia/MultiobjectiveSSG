@@ -3,13 +3,14 @@ import argparse
 import numpy as np
 from tow_env import TugOfWarGame
 from algorithms import MO_SSG_Solver, MO_CoSSG_Solver
+from baselines import NSGA3_Solver, MOEAD_Solver
 from mo_utils import non_dominated_sort_leader
 
 def main():
     parser = argparse.ArgumentParser(description="Run Tug-of-War MO-SSG Experiments")
     parser.add_argument("--discretization", type=str, choices=["coarse", "medium", "fine"], default="medium", help="Discretization level")
     parser.add_argument("--dimension", type=int, choices=[2, 3], default=2, help="Problem dimension (K)")
-    parser.add_argument("--algo", type=str, choices=["EA", "CoEA"], default="EA", help="Algorithm to run")
+    parser.add_argument("--algo", type=str, choices=["EA", "CoEA", "NSGA3", "MOEAD"], default="EA", help="Algorithm to run")
     parser.add_argument("--pop_size", type=int, default=100, help="Population size")
     parser.add_argument("--generations", type=int, default=50, help="Generations (for EA)")
     parser.add_argument("--epochs", type=int, default=10, help="Epochs (for CoEA)")
@@ -32,6 +33,16 @@ def main():
     elif args.algo == "CoEA":
         print(f"Initializing CoEA Solver (Pop={args.pop_size}, Epochs={args.epochs}, Gen/E={args.gen_per_epoch})...")
         solver = MO_CoSSG_Solver(game, pop_size=args.pop_size, epochs=args.epochs, gen_per_epoch=args.gen_per_epoch)
+        final_population = solver.run()
+        
+    elif args.algo == "NSGA3":
+        print(f"Initializing NSGA3 Solver (Pop={args.pop_size}, Gens={args.generations})...")
+        solver = NSGA3_Solver(game, pop_size=args.pop_size, generations=args.generations)
+        final_population = solver.run()
+        
+    elif args.algo == "MOEAD":
+        print(f"Initializing MOEAD Solver (Pop={args.pop_size}, Gens={args.generations})...")
+        solver = MOEAD_Solver(game, pop_size=args.pop_size, generations=args.generations)
         final_population = solver.run()
     
     # Analysis of results
