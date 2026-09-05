@@ -22,7 +22,7 @@ class LeaderStrategy:
             n = len(self.strategies)
             self.probabilities = [1.0/n] * n
 
-class MO_SSG_Solver:
+class WCD_EA:
     def __init__(self, game, pop_size=20, generations=20):
         self.game = game
         self.pop_size = pop_size
@@ -129,14 +129,28 @@ class MO_SSG_Solver:
 
     def run(self):
         population = self.initialize_population()
+        pop_ranks = {i: 0 for i in range(self.pop_size)}
+        pop_distances = {i: 0.0 for i in range(self.pop_size)}
+        
+        fronts = non_dominated_sort_leader(population)
+        for r, front in enumerate(fronts):
+            distances = self._get_crowding_distances(population, front)
+            for idx in front:
+                pop_ranks[idx] = r
+                pop_distances[idx] = distances[idx]
         
         for gen in range(self.generations):
             print(f"Generation {gen+1}/{self.generations}")
             offspring = []
             
             while len(offspring) < self.pop_size:
-                parents = random.sample(population, 2)
-                child = self.crossover(parents[0], parents[1])
+                i, j = random.sample(range(self.pop_size), 2)
+                p1 = population[i] if pop_ranks[i] < pop_ranks[j] or (pop_ranks[i] == pop_ranks[j] and pop_distances[i] > pop_distances[j]) else population[j]
+                
+                i, j = random.sample(range(self.pop_size), 2)
+                p2 = population[i] if pop_ranks[i] < pop_ranks[j] or (pop_ranks[i] == pop_ranks[j] and pop_distances[i] > pop_distances[j]) else population[j]
+                
+                child = self.crossover(p1, p2)
                 self.mutate(child)
                 self.evaluate_individual(child)
                 offspring.append(child)
@@ -146,26 +160,35 @@ class MO_SSG_Solver:
             fronts = non_dominated_sort_leader(combined)
             
             next_pop = []
-            for front in fronts:
+            next_ranks = {}
+            next_distances = {}
+            for r, front in enumerate(fronts):
+                distances = self._get_crowding_distances(combined, front)
                 if len(next_pop) + len(front) <= self.pop_size:
                     for idx in front:
+                        next_ranks[len(next_pop)] = r
+                        next_distances[len(next_pop)] = distances[idx]
                         next_pop.append(combined[idx])
                 else:
                     needed = self.pop_size - len(next_pop)
-                    sorted_front = self._crowding_distance_sort(combined, front)
+                    sorted_front = sorted(front, key=lambda i: distances[i], reverse=True)
                     for i in range(needed):
-                        next_pop.append(combined[sorted_front[i]])
+                        idx = sorted_front[i]
+                        next_ranks[len(next_pop)] = r
+                        next_distances[len(next_pop)] = distances[idx]
+                        next_pop.append(combined[idx])
                     break
             
             population = next_pop
+            pop_ranks = next_ranks
+            pop_distances = next_distances
             
         return population
 
-    def _crowding_distance_sort(self, population, front_indices):
+    def _get_crowding_distances(self, population, front_indices):
         l = len(front_indices)
-        if l == 0: return []
-        
         distances = {idx: 0.0 for idx in front_indices}
+        if l == 0: return distances
         
         points = []
         for idx in front_indices:
@@ -193,10 +216,14 @@ class MO_SSG_Solver:
                 next_val = points[sorted_indices[i+1], m]
                 distances[idx] += (next_val - prev_val) / diff
                 
+        return distances
+
+    def _crowding_distance_sort(self, population, front_indices):
+        distances = self._get_crowding_distances(population, front_indices)
         return sorted(front_indices, key=lambda i: distances[i], reverse=True)
 
 
-class MO_CoSSG_Solver:
+class WCD_CoEA:
     def __init__(self, game, pop_size=20, epochs=20, gen_per_epoch=10):
         self.game = game
         self.pop_size = pop_size
@@ -352,10 +379,10 @@ class MO_CoSSG_Solver:
                  return random.choice(self.pure_strat_indices)
         return f_idx
 
-    def crowding_distance_leader(self, population, front):
+    def get_crowding_distance_leader(self, population, front):
         l = len(front)
-        if l == 0: return []
         distances = {idx: 0.0 for idx in front}
+        if l == 0: return distances
         points = []
         for idx in front:
             pt = population[idx].nadir
@@ -371,12 +398,16 @@ class MO_CoSSG_Solver:
             if diff == 0: continue
             for i in range(1, l - 1):
                 distances[front[sorted_indices[i]]] += (points[sorted_indices[i+1],m] - points[sorted_indices[i-1],m])/diff
+        return distances
+
+    def crowding_distance_leader(self, population, front):
+        distances = self.get_crowding_distance_leader(population, front)
         return sorted(front, key=lambda i: distances[i], reverse=True)
 
-    def crowding_distance_follower(self, fitness_vectors, front):
+    def get_crowding_distance_follower(self, fitness_vectors, front):
         l = len(front)
-        if l == 0: return []
         distances = {idx: 0.0 for idx in front}
+        if l == 0: return distances
         points = np.array([fitness_vectors[i] for i in front])
         
         for m in range(self.game.n_objectives):
@@ -388,6 +419,10 @@ class MO_CoSSG_Solver:
             for i in range(1, l - 1):
                  distances[front[sorted_indices[i]]] += (points[sorted_indices[i+1],m] - points[sorted_indices[i-1],m])/diff
         
+        return distances
+
+    def crowding_distance_follower(self, fitness_vectors, front):
+        distances = self.get_crowding_distance_follower(fitness_vectors, front)
         return sorted(front, key=lambda i: distances[i], reverse=True)
 
     def run(self):
@@ -396,14 +431,39 @@ class MO_CoSSG_Solver:
         
         self.evaluate_leader(P_L, P_F)
         
+        ranks_L = {i: 0 for i in range(self.pop_size)}
+        dist_L = {i: 0.0 for i in range(self.pop_size)}
+        ranks_F = {i: 0 for i in range(self.pop_size)}
+        dist_F = {i: 0.0 for i in range(self.pop_size)}
+        
+        fronts_L = non_dominated_sort_leader(P_L)
+        for r, front in enumerate(fronts_L):
+            dists = self.get_crowding_distance_leader(P_L, front)
+            for idx in front:
+                ranks_L[idx] = r
+                dist_L[idx] = dists[idx]
+                
+        fitness_F = self.evaluate_follower(P_F, P_L)
+        fronts_F = non_dominated_sort_basic(fitness_F)
+        for r, front in enumerate(fronts_F):
+            dists = self.get_crowding_distance_follower(fitness_F, front)
+            for idx in front:
+                ranks_F[idx] = r
+                dist_F[idx] = dists[idx]
+        
         for epoch in range(self.epochs):
             print(f"Epoch {epoch+1}/{self.epochs}")
             
             for gen in range(self.gen_per_epoch):
                 offspring_F = []
                 while len(offspring_F) < self.pop_size:
-                    parents = random.sample(P_F, 2)
-                    child = self.crossover_follower(parents[0], parents[1])
+                    i, j = random.sample(range(self.pop_size), 2)
+                    p1 = P_F[i] if ranks_F[i] < ranks_F[j] or (ranks_F[i] == ranks_F[j] and dist_F[i] > dist_F[j]) else P_F[j]
+                    
+                    i, j = random.sample(range(self.pop_size), 2)
+                    p2 = P_F[i] if ranks_F[i] < ranks_F[j] or (ranks_F[i] == ranks_F[j] and dist_F[i] > dist_F[j]) else P_F[j]
+                    
+                    child = self.crossover_follower(p1, p2)
                     child = self.mutate_follower(child)
                     offspring_F.append(child)
                 
@@ -412,23 +472,38 @@ class MO_CoSSG_Solver:
                 
                 fronts = non_dominated_sort_basic(fitness_F)
                 next_F = []
-                for front in fronts:
+                next_ranks_F = {}
+                next_dist_F = {}
+                for r, front in enumerate(fronts):
+                    dists = self.get_crowding_distance_follower(fitness_F, front)
                     if len(next_F) + len(front) <= self.pop_size:
-                        next_F.extend([combined_F[i] for i in front])
+                        for idx in front:
+                            next_ranks_F[len(next_F)] = r
+                            next_dist_F[len(next_F)] = dists[idx]
+                            next_F.append(combined_F[idx])
                     else:
-                        subset = [combined_F[i] for i in front]
-                        fit_subset = [fitness_F[i] for i in front]
-                        local_sorted = self.crowding_distance_follower(fitness_F, front)
+                        sorted_front = sorted(front, key=lambda i: dists[i], reverse=True)
                         needed = self.pop_size - len(next_F)
-                        next_F.extend([combined_F[i] for i in local_sorted[:needed]])
+                        for i in range(needed):
+                            idx = sorted_front[i]
+                            next_ranks_F[len(next_F)] = r
+                            next_dist_F[len(next_F)] = dists[idx]
+                            next_F.append(combined_F[idx])
                         break
                 P_F = next_F
+                ranks_F = next_ranks_F
+                dist_F = next_dist_F
             
             for gen in range(self.gen_per_epoch):
                 offspring_L = []
                 while len(offspring_L) < self.pop_size:
-                    parents = random.sample(P_L, 2)
-                    child = self.crossover_leader(parents[0], parents[1])
+                    i, j = random.sample(range(self.pop_size), 2)
+                    p1 = P_L[i] if ranks_L[i] < ranks_L[j] or (ranks_L[i] == ranks_L[j] and dist_L[i] > dist_L[j]) else P_L[j]
+                    
+                    i, j = random.sample(range(self.pop_size), 2)
+                    p2 = P_L[i] if ranks_L[i] < ranks_L[j] or (ranks_L[i] == ranks_L[j] and dist_L[i] > dist_L[j]) else P_L[j]
+                    
+                    child = self.crossover_leader(p1, p2)
                     self.mutate_leader(child)
                     offspring_L.append(child)
                     
@@ -437,15 +512,26 @@ class MO_CoSSG_Solver:
                 
                 fronts = non_dominated_sort_leader(combined_L)
                 next_L = []
-                for front in fronts:
+                next_ranks_L = {}
+                next_dist_L = {}
+                for r, front in enumerate(fronts):
+                    dists = self.get_crowding_distance_leader(combined_L, front)
                     if len(next_L) + len(front) <= self.pop_size:
-                         for idx in front: next_L.append(combined_L[idx])
+                         for idx in front:
+                             next_ranks_L[len(next_L)] = r
+                             next_dist_L[len(next_L)] = dists[idx]
+                             next_L.append(combined_L[idx])
                     else:
                         needed = self.pop_size - len(next_L)
-                        sorted_front = self.crowding_distance_leader(combined_L, front)
+                        sorted_front = sorted(front, key=lambda i: dists[i], reverse=True)
                         for i in range(needed):
-                            next_L.append(combined_L[sorted_front[i]])
+                            idx = sorted_front[i]
+                            next_ranks_L[len(next_L)] = r
+                            next_dist_L[len(next_L)] = dists[idx]
+                            next_L.append(combined_L[idx])
                         break
                 P_L = next_L
+                ranks_L = next_ranks_L
+                dist_L = next_dist_L
                 
         return P_L

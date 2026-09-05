@@ -2,9 +2,10 @@
 import argparse
 import numpy as np
 from tow_env import TugOfWarGame
-from algorithms import MO_SSG_Solver, MO_CoSSG_Solver
+from algorithms import WCD_EA, WCD_CoEA
 from baselines import NSGA3_Solver, MOEAD_Solver
 from mo_utils import non_dominated_sort_leader
+from metric_utils import calculate_igd, generate_tow_reference_set, calculate_expected_force
 
 def main():
     parser = argparse.ArgumentParser(description="Run Tug-of-War MO-SSG Experiments")
@@ -27,12 +28,12 @@ def main():
     
     if args.algo == "EA":
         print(f"Initializing EA Solver (Pop={args.pop_size}, Gens={args.generations})...")
-        solver = MO_SSG_Solver(game, pop_size=args.pop_size, generations=args.generations)
+        solver = WCD_EA(game, pop_size=args.pop_size, generations=args.generations)
         final_population = solver.run()
         
     elif args.algo == "CoEA":
         print(f"Initializing CoEA Solver (Pop={args.pop_size}, Epochs={args.epochs}, Gen/E={args.gen_per_epoch})...")
-        solver = MO_CoSSG_Solver(game, pop_size=args.pop_size, epochs=args.epochs, gen_per_epoch=args.gen_per_epoch)
+        solver = WCD_CoEA(game, pop_size=args.pop_size, epochs=args.epochs, gen_per_epoch=args.gen_per_epoch)
         final_population = solver.run()
         
     elif args.algo == "NSGA3":
@@ -96,6 +97,20 @@ def main():
         print(f"Components with Max Force (~1.0): {max_force_count}/{total_strategies} ({max_force_count/total_strategies:.1%})")
         if args.dimension == 2:
             print(f"Components in 1st Quadrant (0-90 deg): {first_quadrant_count}/{total_strategies} ({first_quadrant_count/total_strategies:.1%})")
+
+    print("\n--- IGD Calculation ---")
+    reference_set = generate_tow_reference_set(args.dimension)
+    
+    obtained_points = []
+    for idx in best_indices:
+        ind = final_population[idx]
+        obtained_points.append(calculate_expected_force(ind, game))
+        
+    if obtained_points:
+        igd_value = calculate_igd(obtained_points, reference_set)
+        print(f"IGD: {igd_value:.6f}")
+    else:
+        print("No valid strategies found to calculate IGD.")
         
 if __name__ == "__main__":
     main()

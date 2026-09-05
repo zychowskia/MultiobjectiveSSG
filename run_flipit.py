@@ -4,9 +4,10 @@ import json
 import numpy as np
 import os
 from flipit_env import FlipItGame
-from algorithms import MO_SSG_Solver, MO_CoSSG_Solver
+from algorithms import WCD_EA, WCD_CoEA
 from baselines import NSGA3_Solver, MOEAD_Solver
 from mo_utils import non_dominated_sort_leader
+from metric_utils import calculate_igd, extract_nadir_points
 
 def main():
     parser = argparse.ArgumentParser(description="Run MO-SSG Experiments")
@@ -17,6 +18,7 @@ def main():
     parser.add_argument("--generations", type=int, default=20, help="Generations (for EA)")
     parser.add_argument("--epochs", type=int, default=10, help="Epochs (for CoEA)")
     parser.add_argument("--gen_per_epoch", type=int, default=5, help="Generations per epoch (for CoEA)")
+    parser.add_argument("--reference_set", type=str, default=None, help="Path to a numpy .npy file containing the reference set (nadir points) for IGD calculation")
     
     args = parser.parse_args()
     
@@ -35,12 +37,12 @@ def main():
     
     if args.algo == "EA":
         print(f"Initializing EA Solver (Pop={args.pop_size}, Gens={args.generations})...")
-        solver = MO_SSG_Solver(game, pop_size=args.pop_size, generations=args.generations)
+        solver = WCD_EA(game, pop_size=args.pop_size, generations=args.generations)
         final_population = solver.run()
         
     elif args.algo == "CoEA":
         print(f"Initializing CoEA Solver (Pop={args.pop_size}, Epochs={args.epochs}, Gen/E={args.gen_per_epoch})...")
-        solver = MO_CoSSG_Solver(game, pop_size=args.pop_size, epochs=args.epochs, gen_per_epoch=args.gen_per_epoch)
+        solver = WCD_CoEA(game, pop_size=args.pop_size, epochs=args.epochs, gen_per_epoch=args.gen_per_epoch)
         final_population = solver.run()
         
     elif args.algo == "NSGA3":
@@ -75,6 +77,24 @@ def main():
         best_strat_idx = ind.strategies[best_comp_idx]
         print(f"  Top Component: {game.pure_strategies[best_strat_idx]} (prob={ind.probabilities[best_comp_idx]:.4f})")
         print("-" * 20)
+
+    print("\n--- IGD Calculation ---")
+    if args.reference_set:
+        if os.path.exists(args.reference_set):
+            reference_set = np.load(args.reference_set)
+            
+            non_dom_population = [final_population[i] for i in non_dom_indices]
+            obtained_points = extract_nadir_points(non_dom_population)
+            
+            if len(obtained_points) > 0:
+                igd_value = calculate_igd(obtained_points, reference_set)
+                print(f"IGD: {igd_value:.6f}")
+            else:
+                print("No valid nadir points found to calculate IGD.")
+        else:
+            print(f"Error: Reference set file '{args.reference_set}' not found.")
+    else:
+        print("IGD not calculated. Provide a reference set using --reference_set <file.npy>")
 
 if __name__ == "__main__":
     main()

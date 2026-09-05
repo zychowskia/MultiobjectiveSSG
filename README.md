@@ -5,8 +5,8 @@ This repository contains the implementation of Evolutionary Algorithms (EA) and 
 ## Structure
 
 *   **`algorithms.py`**: Contains implementations:
-    *   `MO_SSG_Solver`: Standard Evolutionary Algorithm.
-    *   `MO_CoSSG_Solver`: Coevolutionary Algorithm (Leader vs. Follower populations).
+    *   `WCD_EA`: Standard Evolutionary Algorithm.
+    *   `WCD_CoEA`: Coevolutionary Algorithm (Leader vs. Follower populations).
 *   **`baselines.py`**: Standard MOEA baselines adapted for MO-SSGs using `pymoo`:
     *   `NSGA3_Solver`: NSGA-III baseline.
     *   `MOEAD_Solver`: MOEA/D baseline.

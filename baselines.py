@@ -1,6 +1,6 @@
 import numpy as np
 import random
-from algorithms import MO_SSG_Solver, LeaderStrategy
+from algorithms import WCD_EA, LeaderStrategy
 from mo_utils import calculate_nadir_point, worst_case_set, pareto_prune
 
 from pymoo.util.ref_dirs import get_reference_directions
@@ -9,7 +9,7 @@ from pymoo.core.population import Population
 from pymoo.core.individual import Individual
 from pymoo.decomposition.tchebicheff import Tchebicheff
 
-class NSGA3_Solver(MO_SSG_Solver):
+class NSGA3_Solver(WCD_EA):
     def __init__(self, game, pop_size=20, generations=20):
         super().__init__(game, pop_size, generations)
         
@@ -64,7 +64,7 @@ class NSGA3_Solver(MO_SSG_Solver):
             
         return population
 
-class MOEAD_Solver(MO_SSG_Solver):
+class MOEAD_Solver(WCD_EA):
     def __init__(self, game, pop_size=20, generations=20, n_neighbors=20):
         super().__init__(game, pop_size, generations)
         
